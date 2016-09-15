@@ -4,6 +4,8 @@ using Microsoft.ProjectOxford.Emotion.Contract;
 using Microsoft.ProjectOxford.Face;
 using Microsoft.ProjectOxford.Face.Contract;
 using Newtonsoft.Json;
+using OxyPlot;
+using OxyPlot.Series;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -26,6 +28,74 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Face
 {
+    public class MainViewModel
+    {
+        Windows.Storage.StorageFolder installedLocation = Windows.ApplicationModel.Package.Current.InstalledLocation;
+
+        public MainViewModel()
+        {
+            this.MyModel = new PlotModel { Title = "Emotions" };
+            Draw();
+        }
+
+
+        private void Draw()
+        {
+            var faceImageDir = installedLocation.Path + @"\FramesWithFace\New folder\";
+            var saveFile = installedLocation.Path + @"\FramesWithFace\New folder\saveFaces.txt";
+            var frames = new List<FFrame>();
+            var i = 0;
+
+            string saveString;
+
+            using (Stream f = File.OpenRead(saveFile))
+            {
+                using (var sr = new StreamReader(f))
+                {
+                    saveString = sr.ReadToEnd();
+                }
+            }
+            var lines = new List<LineSeries>();
+
+            var sc = new Scores();
+            foreach (var s in sc.ToRankedList())
+            {
+                lines.Add(new LineSeries()
+                {
+                    StrokeThickness = 2,
+                    MarkerSize = 3,
+                    MarkerType = MarkerType.Circle,
+                    CanTrackerInterpolatePoints = false,
+                    Title = string.Format(s.Key),
+                    Smooth = false,
+                });
+            }
+
+            var faces = JsonConvert.DeserializeObject<FFrame[]>(saveString);
+            foreach (var face in faces.OrderBy(x => PathToSecond(x.FileName)))
+            {
+                var seconds = PathToSecond(face.FileName);
+                if (face.Emotions != null && face.Emotions.Any())
+                {
+                    foreach (var emo in face.Emotions.First().Scores.ToRankedList())
+                    {
+                        var line = lines.First(l => l.Title == emo.Key);
+                        line.Points.Add(new DataPoint(seconds, emo.Value));
+                    }
+                }
+            }
+            lines.ForEach(l => MyModel.Series.Add(l));
+        }
+
+        private double PathToSecond(string path)
+        {
+            var name = path.Split('\\').Last().Replace(".png", "");
+            return double.Parse(name);
+            
+        }
+
+        public PlotModel MyModel { get; private set; }
+    }
     /// <summary>
     /// An empty page that can be used on its own or navigated to within a Frame.
     /// </summary>
@@ -46,32 +116,10 @@ namespace Face
         {
             base.OnNavigatedTo(e);
 
-            //await Init();
-            //await CreateFaces();
-            //await Training();
+            await Init();
+            await CreateFaces();
+            await Training();
             await FindAllFaces();
-            await Draw();
-        }
-
-        private async Task Draw()
-        {
-            var faceImageDir = installedLocation.Path + @"\FramesWithFace\New folder\";
-            var saveFile = installedLocation.Path + @"\FramesWithFace\New folder\saveFaces.txt";
-            var frames = new List<FFrame>();
-            var i = 0;
-
-            string saveString;
-
-            StorageFile photoFile = await StorageFile.GetFileFromPathAsync(saveFile);
-            using (Stream f = await photoFile.OpenStreamForWriteAsync())
-            {
-                using (var sr = new StreamReader(f))
-                {
-                     saveString = await sr.ReadToEndAsync();
-                }
-            }
-
-            var faces = JsonConvert.DeserializeObject<FFrame[]>(saveString);
         }
 
         async Task Init()
@@ -80,15 +128,14 @@ namespace Face
             
             var folder = await installedLocation.GetFolderAsync("FramesWithFace");
             var listCopy = new List<Task<StorageFile>>();
-            for (int i = 1; i < 1415; i++)
+            foreach (string imagePath in Directory.GetFiles(installedLocation.Path + @"\frames\"))
             {
-                var path = installedLocation.Path + $"\\frames\\{i}.png";
-                var faces = await faceHandler.Handle(path);
+                var faces = await faceHandler.Handle(imagePath);
                 if (faces != null)
                 {
                     if (faces.Any())
                     {
-                        StorageFile photoFile = await StorageFile.GetFileFromPathAsync(path);
+                        StorageFile photoFile = await StorageFile.GetFileFromPathAsync(imagePath);
                         listCopy.Add(photoFile.CopyAsync(folder).AsTask());
                         count++;
                     }
@@ -99,7 +146,6 @@ namespace Face
 
         async Task CreateFaces()
         {
-
             var person = await faceServiceClient.GetPersonAsync(personGroupId, personId);
 
             foreach (var item in person.PersistedFaceIds)
@@ -244,9 +290,6 @@ namespace Face
                 Emotion[] emotionResult;
                 using (Stream imageFileStream = File.OpenRead(imageFilePath))
                 {
-                    //
-                    // Detect the emotions in the URL
-                    //
                     emotionResult = await emotionServiceClient.RecognizeAsync(imageFileStream, new[] { rect });
                     return emotionResult;
                 }
