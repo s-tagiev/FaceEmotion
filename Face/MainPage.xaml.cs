@@ -205,10 +205,8 @@ namespace Face
             var faceImageDir = installedLocation.Path + @"\FramesWithFace\";
             var saveFile = installedLocation.Path + @"\FramesWithFace\New folder\saveFaces.txt";
             var frames = new List<FFrame>();
-            var i = 0;
             foreach (string imagePath in Directory.GetFiles(faceImageDir))
             {
-                i++;
                 try
                 {
                     frames.Add(await FindFace(imagePath));
@@ -216,7 +214,6 @@ namespace Face
                 }
                 catch (Exception ex)
                 {
-                    var xy = 9;
                 }
             }
             var saveString = JsonConvert.SerializeObject(frames);
@@ -245,7 +242,6 @@ namespace Face
                 var faceIds = faces.Select(face => face.FaceId).ToArray();
 
                 var results = await faceServiceClient.IdentifyAsync(personGroupId, faceIds);
-                var i = 0;
                 foreach (var identifyResult in results)
                 {
                     Debug.WriteLine("Result of face: {0}", identifyResult.FaceId);
@@ -274,7 +270,6 @@ namespace Face
                         };
                         result.Emotions = emo;
                     }
-                    i++;
                 }
             }
             return result;
